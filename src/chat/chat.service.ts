@@ -1,16 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { COMMENTS } from 'src/shared/constants/comment';
-import { RedisService } from 'src/shared/redis/redis.service';
+import { PrismaService } from 'src/shared/prisma/prisma.service';
 import { Socket, Namespace } from 'socket.io';
 import { v4 as uuid } from 'uuid';
 import { EVENTS } from 'src/shared/enum';
+import { addDays } from 'src/shared/utils/date';
+import { EXPIRY_DAYS } from 'src/shared/constants/config';
+import { Message, Room } from '@prisma/client';
 
 @Injectable()
 export class ChatService {
-  private readonly redisClient;
-
-  constructor(private readonly redisService: RedisService) {
-    this.redisClient = this.redisService.getClient();
+  constructor(
+    private readonly prisma: PrismaService,
+  ) {
   }
 
   // 방 생성
@@ -18,64 +20,77 @@ export class ChatService {
     namespace: string;
     title: string;
   }): Promise<{ id: string }> {
-    const id = await this.generateRoomId();
-    const roomData = { id, ...data };
+    const id = await this.generateId(this.prisma.room);
+    const expiresAt = addDays(new Date(), EXPIRY_DAYS);
+    const roomData = { id, expiresAt, ...data };
 
     // 데이터 처리
-    await this.redisClient.hset(`room:${id}`, roomData);
-    await this.redisClient.sadd('rooms', id);
+    await this.prisma.room.create({
+      data: roomData,
+    });
 
     return { id };
   }
 
   // 방 id 생성
-  private async generateRoomId(): Promise<string> {
-    let roomId: string;
-    do roomId = uuid();
-    while (await this.redisClient.exists(roomId));
-    return roomId;
+  private async generateId(prismaModel: {
+    count: (args: any) => Promise<number>;
+  }): Promise<string> {
+    let id: string;
+    let exists: boolean;
+
+    do {
+      id = uuid();
+      exists = (await prismaModel.count({ where: { id } })) > 0;
+    } while (exists);
+
+    return id;
   }
 
   // 방 전체 조회
-  async getRooms(): Promise<string[]> {
-    const roomIds = await this.redisClient.smembers('rooms');
-    return await Promise.all(
-      roomIds.map((id) => this.redisClient.hgetall(`room:${id}`)),
-    );
+  async getRooms(): Promise<Room[]> {
+    return this.prisma.room.findMany();
   }
 
   // 특정 방 조회
-  async getRoom(roomId: string): Promise<Record<string, string>> {
-    const roomData = await this.redisClient.hgetall(`room:${roomId}`);
+  async getRoom(roomId: string): Promise<Room> {
+    const result = await this.prisma.room.findUnique({
+      where: { id: roomId },
+    });
 
-    if (!roomData || Object.keys(roomData).length === 0)
-      throw new NotFoundException();
+    if (!result) throw new NotFoundException();
 
-    return roomData;
+    return result;
   }
 
   // 특정 방 메시지 전체 조회
-  async getMessagesFromRoom(roomId: string): Promise<string[]> {
-    const messageIds = await this.redisClient.smembers('messages');
-    const messages = await Promise.all(
-      messageIds.map(async (messageId) => {
-        const message = await this.redisClient.hgetall(`message:${messageId}`);
-        return { ...message, id: messageId };
-      }),
-    );
-    return messages.filter((message) => message.roomId === roomId);
+  async getMessagesFromRoom(roomId: string): Promise<Message[]> {
+    const result = await this.prisma.message.findMany({
+      where: { roomId },
+      include: {
+        participant: true,
+      },
+    });
+
+    return result;
   }
 
   // 방 입장 처리
-  handleJoinRoom(
+  async handleJoinRoom(
     data: { roomId: string; nickname: string },
     socket: Socket,
-  ): void {
+  ): Promise<void> {
     const { roomId, nickname } = data;
     const namespace: Namespace = socket.nsp;
 
-    // 넥네임 설정
-    (socket.data.nicknames ||= {})[roomId] = nickname;
+    // 참여자 데이터 처리
+    const id = await this.generateId(this.prisma.participant);
+    await this.prisma.participant.create({
+      data: { id, nickname },
+    });
+
+    // 소켓 참여자 설정
+    (socket.data.participants ||= {})[roomId] = id;
 
     // 입장 처리
     socket.join(roomId);
@@ -91,13 +106,22 @@ export class ChatService {
   }
 
   // 방 퇴장 처리
-  handleLeaveRoom(data: { roomId: string }, socket: Socket): void {
+  async handleLeaveRoom(
+    data: { roomId: string },
+    socket: Socket,
+  ): Promise<void> {
     const { roomId } = data;
     const namespace: Namespace = socket.nsp;
 
-    // 닉네임 제거
-    const nickname = socket.data.nicknames?.[roomId];
-    delete socket.data.nicknames?.[roomId];
+    // 소켓 참여자 제거
+    const participantId: string = socket.data.participants?.[roomId];
+    delete socket.data.participants?.roomId;
+    
+    // 참여자 데이터 처리
+    const participant = await this.prisma.participant.update({
+      where: { id: participantId },
+      data: { deletedAt: new Date(), isActive: false },
+    });
 
     // 퇴장 처리
     socket.leave(roomId);
@@ -107,38 +131,44 @@ export class ChatService {
       evnet: EVENTS.PING,
       namespace,
       roomId,
-      content: { message: COMMENTS.userLeft(nickname) },
+      content: { message: COMMENTS.userLeft(participant.nickname) },
     };
     this.emit(messageData);
   }
 
   // 메세지 수신 처리
   async handleMessage(
-    data: { roomId: string; message: string },
+    data: { roomId: string; content: string },
     socket: Socket,
   ): Promise<void> {
-    const { roomId, message } = data;
+    const { roomId, content } = data;
     const namespace: Namespace = socket.nsp;
     const nickname: string = socket.data.nicknames[roomId];
+    const participantId: string = socket.data.participants?.[roomId];
 
     // 데이터 처리
-    const id = await this.redisClient.incr('messageIdCounter');
-    await this.redisClient.hset(`message:${id}`, {
-      id,
-      message,
+    const messageData = {
+      content,
       nickname,
-      roomId,
+      room: {
+        connect: { id: roomId },
+      },
+      participant: {
+        connect: { id: participantId },
+      },
+    };
+    await this.prisma.message.create({
+      data: messageData,
     });
-    await this.redisClient.sadd('messages', id);
 
     // 코멘트 전송
-    const messageData = {
+    const sendData = {
       evnet: EVENTS.MESSAGE,
       namespace,
       roomId,
-      content: { nickname, message },
+      content: { nickname, content },
     };
-    this.emit(messageData);
+    this.emit(sendData);
   }
 
   // 전송

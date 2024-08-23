@@ -37,26 +37,26 @@ export class ChatGateway
 
   // 방 입장 처리
   @SubscribeMessage('join')
-  handleJoinRoom(
+  async handleJoinRoom(
     @MessageBody() data: { roomId: string; nickname: string },
     @ConnectedSocket() socket: Socket,
-  ): void {
-    this.chatService.handleJoinRoom(data, socket);
+  ): Promise<void> {
+    await this.chatService.handleJoinRoom(data, socket);
   }
 
   // 방 퇴장 처리
   @SubscribeMessage('leave')
-  handleLeaveRoom(
+  async handleLeaveRoom(
     @MessageBody() data: { roomId: string },
     @ConnectedSocket() socket: Socket,
-  ): void {
+  ): Promise<void> {
     this.chatService.handleLeaveRoom(data, socket);
   }
 
   // 메세지 수신 처리
   @SubscribeMessage('message')
   async handleMessage(
-    @MessageBody() data: { roomId: string; message: string },
+    @MessageBody() data: { roomId: string; content: string },
     @ConnectedSocket() socket: Socket,
   ): Promise<void> {
     await this.chatService.handleMessage(data, socket);
