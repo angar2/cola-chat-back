@@ -19,6 +19,13 @@ export class ChatController {
     return { statusCode: 200, payload };
   }
 
+  // 특정 방 조회
+  @Get('rooms/:roomId')
+  async getRoom(@Param('roomId') roomId: string) {
+    const payload = await this.chatService.getRoom(roomId);
+    return { statusCode: 200, payload };
+  }
+
   // 특정 방 메시지 전체 조회
   @Get('messages/:roomId')
   async getMessagesFromRoom(@Param('roomId') roomId: string) {

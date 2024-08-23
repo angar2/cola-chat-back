@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { COMMENTS } from 'src/shared/constants/comment';
 import { RedisService } from 'src/shared/redis/redis.service';
 import { Socket, Namespace } from 'socket.io';
@@ -39,6 +39,16 @@ export class ChatService {
     return await Promise.all(
       roomIds.map((id) => this.redisClient.hgetall(`room:${id}`)),
     );
+  }
+
+  // 특정 방 조회
+  async getRoom(roomId: string): Promise<Record<string, string>> {
+    const roomData = await this.redisClient.hgetall(`room:${roomId}`);
+
+    if (!roomData || Object.keys(roomData).length === 0)
+      throw new NotFoundException();
+
+    return roomData;
   }
 
   // 특정 방 메시지 전체 조회
