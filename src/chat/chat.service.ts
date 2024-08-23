@@ -14,12 +14,15 @@ export class ChatService {
   }
 
   // 방 생성
-  async createRoom(data: { name: string }): Promise<{ id: string }> {
-    const { name } = data;
+  async createRoom(data: {
+    namespace: string;
+    title: string;
+  }): Promise<{ id: string }> {
     const id = await this.generateRoomId();
+    const roomData = { id, ...data };
 
     // 데이터 처리
-    await this.redisClient.hset(`room:${id}`, { id, name });
+    await this.redisClient.hset(`room:${id}`, roomData);
     await this.redisClient.sadd('rooms', id);
 
     return { id };

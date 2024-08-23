@@ -7,7 +7,7 @@ export class ChatController {
 
   // 방 생성
   @Post('rooms')
-  async createRoom(@Body() data: { name: string }) {
+  async createRoom(@Body() data: { namespace: string; title: string }) {
     const payload = await this.chatService.createRoom(data);
     return { statusCode: 201, payload };
   }
