@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Database
+datasource db {
+  provider = "mysql"
+  url      = env("DB_URL")
+}
+
+// Model
+model User {
+  id        String    @id
+  email     String    @unique
+  name      String?
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+  isActive  Boolean   @default(true)
+  rooms     Room[]
+}
+
+model Room {
+  id        String    @id
+  title     String
+  namespace String
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  isExpired Boolean   @default(false)
+  messages  Message[]
+  participants  RoomParticipant[]
+  user      User?     @relation(fields: [userId], references: [id])
+  userId    String?
+}
+
+model Participant {
+  id        String    @id
+  nickname  String
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+  isActive  Boolean   @default(true)
+  messages  Message[]
+  participants  RoomParticipant[]
+}
+
+model Message {
+  id            Int         @id @default(autoincrement())
+  content       String
+  sentAt        DateTime    @default(now())
+  room          Room        @relation(fields: [roomId], references: [id])
+  roomId        String
+  participant   Participant @relation(fields: [participantId], references: [id])
+  participantId String
+
+  @@index([roomId])
+  @@index([participantId])
+}
+
+model RoomParticipant {
+  id            Int         @id @default(autoincrement())
+  joinedAt      DateTime    @default(now())
+  leftAt        DateTime?
+  isActive      Boolean     @default(true)
+  room          Room        @relation(fields: [roomId], references: [id])
+  roomId        String
+  participant   Participant @relation(fields: [participantId], references: [id])
+  participantId String
+
+  @@index([roomId])
+  @@index([participantId])
+}
