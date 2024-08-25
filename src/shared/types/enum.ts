@@ -1,4 +1,4 @@
-export enum EVENTS {
+export enum SocketEvent {
   MESSAGE = 'message',
   PING = 'ping',
-};
+}

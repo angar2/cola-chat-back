@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `Message` ADD COLUMN `type` ENUM('MESSAGE', 'PING') NOT NULL DEFAULT 'MESSAGE';

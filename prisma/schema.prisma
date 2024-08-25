@@ -44,6 +44,7 @@ model Participant {
 
 model Message {
   id            Int         @id @default(autoincrement())
+  type          MessageType @default(MESSAGE)
   content       String
   sentAt        DateTime    @default(now())
   room          Room        @relation(fields: [roomId], references: [id])
@@ -67,4 +68,10 @@ model RoomParticipant {
 
   @@index([roomId])
   @@index([participantId])
+}
+
+// enum
+enum MessageType {
+  MESSAGE
+  PING
 }

@@ -3,33 +3,30 @@ import { COMMENTS } from 'src/shared/constants/comment';
 import { PrismaService } from 'src/shared/prisma/prisma.service';
 import { Socket, Namespace } from 'socket.io';
 import { v4 as uuid } from 'uuid';
-import { EVENTS } from 'src/shared/enum';
+import { SocketEvent } from 'src/shared/types/enum';
 import { addDays } from 'src/shared/utils/date';
 import { EXPIRY_DAYS } from 'src/shared/constants/config';
-import { Message, Room } from '@prisma/client';
+import { Message, MessageType, Room } from '@prisma/client';
 
 @Injectable()
 export class ChatService {
-  constructor(
-    private readonly prisma: PrismaService,
-  ) {
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   // 방 생성
   async createRoom(data: {
     namespace: string;
     title: string;
-  }): Promise<{ id: string }> {
-    const id = await this.generateId(this.prisma.room);
+  }): Promise<Room> {
+    const roomId = await this.generateId(this.prisma.room);
     const expiresAt = addDays(new Date(), EXPIRY_DAYS);
-    const roomData = { id, expiresAt, ...data };
+    const roomData = { id: roomId, expiresAt, ...data };
 
     // 데이터 처리
-    await this.prisma.room.create({
+    const resilt = await this.prisma.room.create({
       data: roomData,
     });
 
-    return { id };
+    return resilt;
   }
 
   // 방 id 생성
@@ -84,25 +81,27 @@ export class ChatService {
     const namespace: Namespace = socket.nsp;
 
     // 참여자 데이터 처리
-    const id = await this.generateId(this.prisma.participant);
+    const participantId = await this.generateId(this.prisma.participant);
     await this.prisma.participant.create({
-      data: { id, nickname },
+      data: { id: participantId, nickname },
     });
 
     // 소켓 참여자 설정
-    (socket.data.participants ||= {})[roomId] = id;
+    (socket.data.participants ||= {})[roomId] = roomId;
 
     // 입장 처리
     socket.join(roomId);
 
-    // 코멘트 전송
-    const messageData = {
-      evnet: EVENTS.PING,
-      namespace,
+    // 메세지 저장
+    const message = await this.createMessage({
+      type: MessageType.PING,
+      content: COMMENTS.userJoined(nickname),
       roomId,
-      content: { message: COMMENTS.userJoined(nickname) },
-    };
-    this.emit(messageData);
+      participantId,
+    });
+
+    // 메세지 전송
+    this.emit(namespace, message);
   }
 
   // 방 퇴장 처리
@@ -116,7 +115,7 @@ export class ChatService {
     // 소켓 참여자 제거
     const participantId: string = socket.data.participants?.[roomId];
     delete socket.data.participants?.roomId;
-    
+
     // 참여자 데이터 처리
     const participant = await this.prisma.participant.update({
       where: { id: participantId },
@@ -126,14 +125,16 @@ export class ChatService {
     // 퇴장 처리
     socket.leave(roomId);
 
-    // 코멘트 전송
-    const messageData = {
-      evnet: EVENTS.PING,
-      namespace,
+    // 메세지 저장
+    const message = await this.createMessage({
+      type: MessageType.PING,
+      content: COMMENTS.userLeft(participant.nickname),
       roomId,
-      content: { message: COMMENTS.userLeft(participant.nickname) },
-    };
-    this.emit(messageData);
+      participantId,
+    });
+
+    // 메세지 전송
+    this.emit(namespace, message);
   }
 
   // 메세지 수신 처리
@@ -143,37 +144,40 @@ export class ChatService {
   ): Promise<void> {
     const { roomId, content } = data;
     const namespace: Namespace = socket.nsp;
-    const nickname: string = socket.data.nicknames[roomId];
     const participantId: string = socket.data.participants?.[roomId];
 
-    // 데이터 처리
-    const messageData = {
+    // 메세지 저장
+    const message = await this.createMessage({
+      type: MessageType.MESSAGE,
       content,
-      nickname,
-      room: {
-        connect: { id: roomId },
-      },
-      participant: {
-        connect: { id: participantId },
-      },
-    };
-    await this.prisma.message.create({
-      data: messageData,
+      roomId,
+      participantId,
     });
 
-    // 코멘트 전송
-    const sendData = {
-      evnet: EVENTS.MESSAGE,
-      namespace,
-      roomId,
-      content: { nickname, content },
-    };
-    this.emit(sendData);
+    // 메세지 전송
+    this.emit(namespace, message);
   }
 
-  // 전송
-  emit(data): void {
-    const { evnet, namespace, roomId, content } = data;
-    namespace.to(roomId).emit(evnet, content);
+  // 메세지 저장
+  async createMessage(messageData): Promise<Message> {
+    const { type, content, roomId, participantId } = messageData;
+    return await this.prisma.message.create({
+      data: {
+        type,
+        content,
+        room: {
+          connect: { id: roomId },
+        },
+        participant: {
+          connect: { id: participantId },
+        },
+      },
+    });
+  }
+
+  // 전송 처리
+  emit(namespace: Namespace, data: Message): void {
+    const { roomId, type } = data;
+    namespace.to(roomId).emit(SocketEvent[type], data);
   }
 }
