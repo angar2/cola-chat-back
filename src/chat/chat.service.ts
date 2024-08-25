@@ -13,10 +13,7 @@ export class ChatService {
   constructor(private readonly prisma: PrismaService) {}
 
   // 방 생성
-  async createRoom(data: {
-    namespace: string;
-    title: string;
-  }): Promise<Room> {
+  async createRoom(data: { namespace: string; title: string }): Promise<Room> {
     const roomId = await this.generateId(this.prisma.room);
     const expiresAt = addDays(new Date(), EXPIRY_DAYS);
     const roomData = { id: roomId, expiresAt, ...data };
@@ -87,7 +84,7 @@ export class ChatService {
     });
 
     // 소켓 참여자 설정
-    (socket.data.participants ||= {})[roomId] = roomId;
+    (socket.data.participants ||= {})[roomId] = participantId;
 
     // 입장 처리
     socket.join(roomId);
