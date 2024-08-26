@@ -5,7 +5,7 @@ import { Socket, Namespace } from 'socket.io';
 import { v4 as uuid } from 'uuid';
 import { SocketEvent } from 'src/shared/types/enum';
 import { addDays } from 'src/shared/utils/date';
-import { EXPIRY_DAYS } from 'src/shared/constants/config';
+import { EXPIRY_DAYS, MESSAGE_LIMIT } from 'src/shared/constants/config';
 import { Message, MessageType, Room } from '@prisma/client';
 
 @Injectable()
@@ -58,12 +58,18 @@ export class ChatService {
   }
 
   // 특정 방 메시지 전체 조회
-  async getMessagesFromRoom(roomId: string): Promise<Message[]> {
+  async getMessagesFromRoom(params: {
+    roomId: string;
+    page: number;
+  }): Promise<Message[]> {
+    const { roomId, page } = params;
     const result = await this.prisma.message.findMany({
       where: { roomId },
       include: {
         participant: true,
       },
+      skip: (page - 1) * MESSAGE_LIMIT,
+      take: MESSAGE_LIMIT,
     });
 
     return result;
