@@ -70,9 +70,12 @@ export class ChatService {
       },
       skip: (page - 1) * MESSAGE_LIMIT,
       take: MESSAGE_LIMIT,
+      orderBy: {
+        sentAt: 'desc',
+      },
     });
 
-    return result;
+    return result.reverse();
   }
 
   // 방 입장 처리
