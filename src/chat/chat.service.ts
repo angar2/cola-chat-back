@@ -169,6 +169,9 @@ export class ChatService {
           connect: { id: participantId },
         },
       },
+      include: {
+        participant: true,
+      },
     });
   }
 
