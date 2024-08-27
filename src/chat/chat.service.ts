@@ -6,7 +6,8 @@ import { v4 as uuid } from 'uuid';
 import { SocketEvent } from 'src/shared/types/enum';
 import { addDays } from 'src/shared/utils/date';
 import { EXPIRY_DAYS, MESSAGE_LIMIT } from 'src/shared/constants/config';
-import { Message, MessageType, Room } from '@prisma/client';
+import { Message, MessageType, Participant, Room } from '@prisma/client';
+import generateNickname from 'src/shared/utils/nickname';
 
 @Injectable()
 export class ChatService {
@@ -80,34 +81,47 @@ export class ChatService {
 
   // 방 입장 처리
   async handleJoinRoom(
-    data: { roomId: string; nickname: string },
+    data: { roomId: string; participantId: string | null },
     socket: Socket,
-  ): Promise<void> {
-    const { roomId, nickname } = data;
+  ): Promise<Participant> {
+    const { roomId, participantId } = data;
     const namespace: Namespace = socket.nsp;
-
-    // 참여자 데이터 처리
-    const participantId = await this.generateId(this.prisma.participant);
-    await this.prisma.participant.create({
-      data: { id: participantId, nickname },
-    });
-
-    // 소켓 참여자 설정
-    (socket.data.participants ||= {})[roomId] = participantId;
 
     // 입장 처리
     socket.join(roomId);
 
-    // 메세지 저장
-    const message = await this.createMessage({
-      type: MessageType.PING,
-      content: COMMENTS.userJoined(nickname),
-      roomId,
-      participantId,
-    });
+    // 참여자 데이터 처리
+    let participant: Participant;
+    if (participantId) {
+      // 참여자 조회
+      participant = await this.prisma.participant.findUnique({
+        where: { id: participantId },
+      });
+    } else {
+      // 참여자 생성
+      const participantId = await this.generateId(this.prisma.participant);
+      const nickname = generateNickname();
 
-    // 메세지 전송
-    this.emit(namespace, message);
+      participant = await this.prisma.participant.create({
+        data: { id: participantId, nickname },
+      });
+
+      // 메세지 저장
+      const message = await this.createMessage({
+        type: MessageType.PING,
+        content: COMMENTS.userJoined(nickname),
+        roomId,
+        participantId,
+      });
+
+      // 메세지 전송
+      this.emit(namespace, message);
+    }
+
+    // 소켓 참여자 설정
+    (socket.data.participants ||= {})[roomId] = participant.id;
+
+    return participant;
   }
 
   // 방 퇴장 처리

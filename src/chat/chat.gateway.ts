@@ -10,7 +10,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
-import { COMMENTS } from 'src/shared/constants/comment';
+import { Participant } from '@prisma/client';
 
 @WebSocketGateway({ namespace: /\/*.+/ })
 export class ChatGateway
@@ -38,10 +38,11 @@ export class ChatGateway
   // 방 입장 처리
   @SubscribeMessage('join')
   async handleJoinRoom(
-    @MessageBody() data: { roomId: string; nickname: string },
+    @MessageBody()
+    data: { roomId: string; participantId: string | null },
     @ConnectedSocket() socket: Socket,
-  ): Promise<void> {
-    await this.chatService.handleJoinRoom(data, socket);
+  ): Promise<Participant> {
+    return await this.chatService.handleJoinRoom(data, socket);
   }
 
   // 방 퇴장 처리
