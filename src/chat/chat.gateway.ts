@@ -41,8 +41,9 @@ export class ChatGateway
     @MessageBody()
     data: { roomId: string; participantId: string | null },
     @ConnectedSocket() socket: Socket,
-  ): Promise<Participant> {
-    return await this.chatService.handleJoinRoom(data, socket);
+  ): Promise<{ data: any }> {
+    const result = await this.chatService.handleJoinRoom(data, socket);
+    return { data: result };
   }
 
   // 방 퇴장 처리
