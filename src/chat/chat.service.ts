@@ -6,7 +6,13 @@ import { v4 as uuid } from 'uuid';
 import { SocketEvent } from 'src/shared/types/enum';
 import { addDays } from 'src/shared/utils/date';
 import { EXPIRY_DAYS, MESSAGE_LIMIT } from 'src/shared/constants/config';
-import { Message, MessageType, Participant, Room } from '@prisma/client';
+import {
+  Message,
+  MessageType,
+  Participant,
+  Prisma,
+  Room,
+} from '@prisma/client';
 import generateNickname from 'src/shared/utils/nickname';
 
 @Injectable()
@@ -58,22 +64,33 @@ export class ChatService {
     return result;
   }
 
-  // 특정 방 메시지 전체 조회
+  // 특정 방의 참여자 메시지 전체 조회
   async getMessagesFromRoom(params: {
     roomId: string;
     page: number;
+    participantId?: string;
   }): Promise<Message[]> {
-    const { roomId, page } = params;
+    const { roomId, page, participantId } = params;
+
+    if (!participantId) return [];
+
+    const message = await this.prisma.message.findFirst({
+      where: { roomId, participantId },
+      orderBy: { sentAt: 'asc' },
+      select: { sentAt: true },
+    });
+
+    let whereInput: Prisma.MessageWhereInput = {
+      roomId,
+      ...(message ? { sentAt: { gte: message.sentAt } } : {}),
+    };
+
     const result = await this.prisma.message.findMany({
-      where: { roomId },
-      include: {
-        participant: true,
-      },
+      where: whereInput,
+      include: { participant: true },
       skip: (page - 1) * MESSAGE_LIMIT,
       take: MESSAGE_LIMIT,
-      orderBy: {
-        sentAt: 'desc',
-      },
+      orderBy: { sentAt: 'desc' },
     });
 
     return result.reverse();
@@ -105,21 +122,21 @@ export class ChatService {
       participant = await this.prisma.participant.create({
         data: { id: participantId, nickname },
       });
-
-      // 메세지 저장
-      const message = await this.createMessage({
-        type: MessageType.PING,
-        content: COMMENTS.userJoined(nickname),
-        roomId,
-        participantId,
-      });
-
-      // 메세지 전송
-      this.emit(namespace, message);
     }
 
     // 소켓 참여자 설정
     (socket.data.participants ||= {})[roomId] = participant.id;
+
+    // 메세지 저장
+    const message = await this.createMessage({
+      type: MessageType.PING,
+      content: COMMENTS.userJoined(participant.nickname),
+      roomId,
+      participantId: participant.id,
+    });
+
+    // 메세지 전송
+    this.emit(namespace, message);
 
     return participant;
   }
