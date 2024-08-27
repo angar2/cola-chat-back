@@ -5,7 +5,11 @@ import { Socket, Namespace } from 'socket.io';
 import { v4 as uuid } from 'uuid';
 import { SocketEvent } from 'src/shared/types/enum';
 import { addDays } from 'src/shared/utils/date';
-import { EXPIRY_DAYS, MESSAGE_LIMIT } from 'src/shared/constants/config';
+import {
+  EXPIRY_DAYS,
+  LEAVE_MESSAGE_DELAY_TIME,
+  MESSAGE_LIMIT,
+} from 'src/shared/constants/config';
 import {
   Message,
   MessageType,
@@ -17,6 +21,8 @@ import generateNickname from 'src/shared/utils/nickname';
 
 @Injectable()
 export class ChatService {
+  private leaveTimeout: Map<string, NodeJS.Timeout> = new Map();
+
   constructor(private readonly prisma: PrismaService) {}
 
   // 방 생성
@@ -127,16 +133,24 @@ export class ChatService {
     // 소켓 참여자 설정
     (socket.data.participants ||= {})[roomId] = participant.id;
 
-    // 메세지 저장
-    const message = await this.createMessage({
-      type: MessageType.PING,
-      content: COMMENTS.userJoined(participant.nickname),
-      roomId,
-      participantId: participant.id,
-    });
+    const timeoutKey = `${roomId}-${participant.id}`;
+    const leaveTimeout = this.leaveTimeout.get(timeoutKey);
+    if (leaveTimeout) {
+      // 퇴장 타임아웃 제거
+      clearTimeout(leaveTimeout);
+      this.leaveTimeout.delete(timeoutKey);
+    } else {
+      // 메세지 저장
+      const message = await this.createMessage({
+        type: MessageType.PING,
+        content: COMMENTS.userJoined(participant.nickname),
+        roomId,
+        participantId: participant.id,
+      });
 
-    // 메세지 전송
-    this.emit(namespace, message);
+      // 메세지 전송
+      this.emit(namespace, message);
+    }
 
     return participant;
   }
@@ -162,16 +176,25 @@ export class ChatService {
     // 퇴장 처리
     socket.leave(roomId);
 
-    // 메세지 저장
-    const message = await this.createMessage({
-      type: MessageType.PING,
-      content: COMMENTS.userLeft(participant.nickname),
-      roomId,
-      participantId,
-    });
+    // 퇴장 메세지 처리
+    const timeoutKey = `${roomId}-${participant.id}`;
+    const timeout = setTimeout(async () => {
+      // 메세지 저장
+      const message = await this.createMessage({
+        type: MessageType.PING,
+        content: COMMENTS.userLeft(participant.nickname),
+        roomId,
+        participantId,
+      });
 
-    // 메세지 전송
-    this.emit(namespace, message);
+      // 메세지 전송
+      this.emit(namespace, message);
+
+      // 타임아웃 제거
+      this.leaveTimeout.delete(timeoutKey);
+    }, LEAVE_MESSAGE_DELAY_TIME);
+
+    this.leaveTimeout.set(timeoutKey, timeout);
   }
 
   // 메세지 수신 처리
