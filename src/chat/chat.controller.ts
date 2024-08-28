@@ -8,22 +8,22 @@ export class ChatController {
   // 방 생성
   @Post('rooms')
   async createRoom(@Body() data: { namespace: string; title: string }) {
-    const payload = await this.chatService.createRoom(data);
-    return { statusCode: 201, payload };
+    const result = await this.chatService.createRoom(data);
+    return { statusCode: 201, data: result };
   }
 
   // 방 전체 조회
   @Get('rooms')
   async getRooms() {
-    const payload = await this.chatService.getRooms();
-    return { statusCode: 200, payload };
+    const result = await this.chatService.getRooms();
+    return { statusCode: 200, data: result };
   }
 
   // 특정 방 조회
   @Get('rooms/:roomId')
   async getRoom(@Param('roomId') roomId: string) {
-    const payload = await this.chatService.getRoom(roomId);
-    return { statusCode: 200, payload };
+    const result = await this.chatService.getRoom(roomId);
+    return { statusCode: 200, data: result };
   }
 
   // 특정 방의 참여자 메시지 전체 조회
@@ -31,7 +31,7 @@ export class ChatController {
   async getMessagesFromRoom(
     @Param() params: { roomId: string; page: number; participantId?: string },
   ) {
-    const payload = await this.chatService.getMessagesFromRoom(params);
-    return { statusCode: 200, payload };
+    const result = await this.chatService.getMessagesFromRoom(params);
+    return { statusCode: 200, data: result };
   }
 }

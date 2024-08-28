@@ -10,9 +10,11 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
-import { Participant } from '@prisma/client';
+import { UseInterceptors } from '@nestjs/common';
+import { WsResponseInterceptor } from 'src/shared/interceptors/ws-response.interceptor';
 
 @WebSocketGateway({ namespace: /\/*.+/ })
+@UseInterceptors(WsResponseInterceptor)
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {

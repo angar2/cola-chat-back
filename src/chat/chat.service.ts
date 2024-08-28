@@ -65,7 +65,9 @@ export class ChatService {
       where: { id: roomId },
     });
 
-    if (!result) throw new NotFoundException();
+    if (!result) {
+      throw new NotFoundException(COMMENTS.ERROR.CHAT_NOT_FOUND);
+    }
 
     return result;
   }
@@ -143,7 +145,7 @@ export class ChatService {
       // 메세지 저장
       const message = await this.createMessage({
         type: MessageType.PING,
-        content: COMMENTS.userJoined(participant.nickname),
+        content: COMMENTS.SOCKET.userJoined(participant.nickname),
         roomId,
         participantId: participant.id,
       });
@@ -182,7 +184,7 @@ export class ChatService {
       // 메세지 저장
       const message = await this.createMessage({
         type: MessageType.PING,
-        content: COMMENTS.userLeft(participant.nickname),
+        content: COMMENTS.SOCKET.userLeft(participant.nickname),
         roomId,
         participantId,
       });
