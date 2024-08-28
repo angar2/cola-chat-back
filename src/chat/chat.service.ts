@@ -61,15 +61,7 @@ export class ChatService {
 
   // 특정 방 조회
   async getRoom(roomId: string): Promise<Room> {
-    const result = await this.prisma.room.findUnique({
-      where: { id: roomId },
-    });
-
-    if (!result) {
-      throw new NotFoundException(COMMENTS.ERROR.CHAT_NOT_FOUND);
-    }
-
-    return result;
+    return await this.checkRoomExpired(roomId);
   }
 
   // 특정 방의 참여자 메시지 전체 조회
@@ -79,6 +71,9 @@ export class ChatService {
     participantId?: string;
   }): Promise<Message[]> {
     const { roomId, page, participantId } = params;
+
+    // 채팅방 만료 확인
+    await this.checkRoomExpired(roomId);
 
     if (!participantId) return [];
 
@@ -208,6 +203,9 @@ export class ChatService {
     const namespace: Namespace = socket.nsp;
     const participantId: string = socket.data.participants?.[roomId];
 
+    // 채팅방 만료 확인
+    await this.checkRoomExpired(roomId);
+
     // 메세지 저장
     const message = await this.createMessage({
       type: MessageType.MESSAGE,
@@ -244,5 +242,23 @@ export class ChatService {
   emit(namespace: Namespace, data: Message): void {
     const { roomId, type } = data;
     namespace.to(roomId).emit(SocketEvent[type], data);
+  }
+
+  // 채팅방 만료 확인
+  private async checkRoomExpired(roomId: string): Promise<Room> {
+    const result = await this.prisma.room.findUnique({
+      where: { id: roomId },
+    });
+
+    if (!result) throw new NotFoundException(COMMENTS.ERROR.CHAT_NOT_FOUND);
+    if (result.expiresAt < new Date()) {
+      await this.prisma.room.update({
+        where: { id: roomId },
+        data: { isExpired: true },
+      });
+      throw new NotFoundException(COMMENTS.ERROR.CHAT_EXPIRED);
+    }
+
+    return result;
   }
 }
