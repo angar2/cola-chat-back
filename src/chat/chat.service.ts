@@ -126,11 +126,17 @@ export class ChatService {
 
     const timeoutKey = `${roomId}-${chatter.id}`;
     const leaveTimeout = this.leaveTimeout.get(timeoutKey);
+
     if (leaveTimeout) {
       // 퇴장 타임아웃 제거
       clearTimeout(leaveTimeout);
       this.leaveTimeout.delete(timeoutKey);
     } else {
+      // 채팅방 명단에 추가
+      await this.prisma.roomChatter.create({
+        data: { roomId: roomId, chatterId: chatter.id },
+      });
+
       // 메세지 저장
       const message = await this.createMessage({
         type: MessageType.PING,
@@ -158,18 +164,28 @@ export class ChatService {
     const chatterId: string = socket.data.chatters?.[roomId];
     delete socket.data.chatters?.roomId;
 
-    // 채터 데이터 처리
-    const chatter = await this.prisma.chatter.update({
-      where: { id: chatterId },
-      data: { deletedAt: new Date(), isActive: false },
-    });
-
     // 퇴장 처리
     socket.leave(roomId);
 
     // 퇴장 메세지 처리
-    const timeoutKey = `${roomId}-${chatter.id}`;
+    const timeoutKey = `${roomId}-${chatterId}`;
     const timeout = setTimeout(async () => {
+      // 채터 데이터 처리
+      const chatter = await this.prisma.chatter.update({
+        where: { id: chatterId },
+        data: { deletedAt: new Date(), isActive: false },
+      });
+
+      // 채팅방 명단에서 제거
+      const roomChatter = await this.prisma.roomChatter.findFirst({
+        where: { roomId: roomId, chatterId: chatter.id },
+      });
+
+      await this.prisma.roomChatter.update({
+        where: { id: roomChatter.id },
+        data: { leftAt: new Date(), isActive: false },
+      });
+
       // 메세지 저장
       const message = await this.createMessage({
         type: MessageType.PING,
