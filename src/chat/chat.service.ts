@@ -58,7 +58,7 @@ export class ChatService {
     return await this.checkRoomExpired(roomId);
   }
 
-  // 특정 방의 참여자 메시지 전체 조회
+  // 특정 방의 채터 메시지 전체 조회
   async getMessagesFromRoom(params: {
     roomId: string;
     page: number;
@@ -104,15 +104,15 @@ export class ChatService {
     // 입장 처리
     socket.join(roomId);
 
-    // 참여자 데이터 처리
+    // 채터 데이터 처리
     let chatter: Chatter;
     if (chatterId) {
-      // 참여자 조회
+      // 채터 조회
       chatter = await this.prisma.chatter.findUnique({
         where: { id: chatterId },
       });
     } else {
-      // 참여자 생성
+      // 채터 생성
       const chatterId = await this.generateId(this.prisma.chatter);
       const nickname = generateNickname();
 
@@ -121,7 +121,7 @@ export class ChatService {
       });
     }
 
-    // 소켓 참여자 설정
+    // 소켓 채터 설정
     (socket.data.chatters ||= {})[roomId] = chatter.id;
 
     const timeoutKey = `${roomId}-${chatter.id}`;
@@ -154,11 +154,11 @@ export class ChatService {
     const { roomId } = data;
     const namespace: Namespace = socket.nsp;
 
-    // 소켓 참여자 제거
+    // 소켓 채터 제거
     const chatterId: string = socket.data.chatters?.[roomId];
     delete socket.data.chatters?.roomId;
 
-    // 참여자 데이터 처리
+    // 채터 데이터 처리
     const chatter = await this.prisma.chatter.update({
       where: { id: chatterId },
       data: { deletedAt: new Date(), isActive: false },

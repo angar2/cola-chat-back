@@ -26,7 +26,7 @@ export class ChatController {
     return { statusCode: 200, data: result };
   }
 
-  // 특정 방의 참여자 메시지 전체 조회
+  // 특정 방의 채터 메시지 전체 조회
   @Get('messages/:roomId/:page/:chatterId?')
   async getMessagesFromRoom(
     @Param() params: { roomId: string; page: number; chatterId?: string },
