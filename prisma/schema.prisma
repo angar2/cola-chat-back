@@ -27,47 +27,47 @@ model Room {
   expiresAt DateTime
   isExpired Boolean   @default(false)
   messages  Message[]
-  participants  RoomParticipant[]
+  roomChatters  RoomChatter[]
   user      User?     @relation(fields: [userId], references: [id])
   userId    String?
 }
 
-model Participant {
+model Chatter {
   id        String    @id
   nickname  String
   createdAt DateTime  @default(now())
   deletedAt DateTime?
   isActive  Boolean   @default(true)
   messages  Message[]
-  participants  RoomParticipant[]
+  roomChatters  RoomChatter[]
 }
 
 model Message {
-  id            Int         @id @default(autoincrement())
-  type          MessageType @default(MESSAGE)
-  content       String
-  sentAt        DateTime    @default(now())
-  room          Room        @relation(fields: [roomId], references: [id])
-  roomId        String
-  participant   Participant @relation(fields: [participantId], references: [id])
-  participantId String
+  id        Int         @id @default(autoincrement())
+  type      MessageType @default(MESSAGE)
+  content   String
+  sentAt    DateTime    @default(now())
+  room      Room        @relation(fields: [roomId], references: [id])
+  roomId    String
+  chatter   Chatter @relation(fields: [chatterId], references: [id])
+  chatterId String
 
   @@index([roomId])
-  @@index([participantId])
+  @@index([chatterId])
 }
 
-model RoomParticipant {
-  id            Int         @id @default(autoincrement())
-  joinedAt      DateTime    @default(now())
-  leftAt        DateTime?
-  isActive      Boolean     @default(true)
-  room          Room        @relation(fields: [roomId], references: [id])
-  roomId        String
-  participant   Participant @relation(fields: [participantId], references: [id])
-  participantId String
+model RoomChatter {
+  id        Int         @id @default(autoincrement())
+  joinedAt  DateTime    @default(now())
+  leftAt    DateTime?
+  isActive  Boolean     @default(true)
+  room      Room        @relation(fields: [roomId], references: [id])
+  roomId    String
+  chatter   Chatter @relation(fields: [chatterId], references: [id])
+  chatterId String
 
   @@index([roomId])
-  @@index([participantId])
+  @@index([chatterId])
 }
 
 // enum

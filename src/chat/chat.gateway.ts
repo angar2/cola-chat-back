@@ -41,7 +41,7 @@ export class ChatGateway
   @SubscribeMessage('join')
   async handleJoinRoom(
     @MessageBody()
-    data: { roomId: string; participantId: string | null },
+    data: { roomId: string; chatterId: string | null },
     @ConnectedSocket() socket: Socket,
   ): Promise<{ data: any }> {
     const result = await this.chatService.handleJoinRoom(data, socket);

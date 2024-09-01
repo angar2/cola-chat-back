@@ -27,9 +27,9 @@ export class ChatController {
   }
 
   // 특정 방의 참여자 메시지 전체 조회
-  @Get('messages/:roomId/:page/:participantId?')
+  @Get('messages/:roomId/:page/:chatterId?')
   async getMessagesFromRoom(
-    @Param() params: { roomId: string; page: number; participantId?: string },
+    @Param() params: { roomId: string; page: number; chatterId?: string },
   ) {
     const result = await this.chatService.getMessagesFromRoom(params);
     return { statusCode: 200, data: result };

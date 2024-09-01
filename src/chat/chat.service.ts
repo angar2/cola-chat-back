@@ -10,13 +10,7 @@ import {
   LEAVE_MESSAGE_DELAY_TIME,
   MESSAGE_LIMIT,
 } from 'src/shared/constants/config';
-import {
-  Message,
-  MessageType,
-  Participant,
-  Prisma,
-  Room,
-} from '@prisma/client';
+import { Message, MessageType, Chatter, Prisma, Room } from '@prisma/client';
 import generateNickname from 'src/shared/utils/nickname';
 
 @Injectable()
@@ -68,17 +62,17 @@ export class ChatService {
   async getMessagesFromRoom(params: {
     roomId: string;
     page: number;
-    participantId?: string;
+    chatterId?: string;
   }): Promise<Message[]> {
-    const { roomId, page, participantId } = params;
+    const { roomId, page, chatterId } = params;
 
     // 채팅방 만료 확인
     await this.checkRoomExpired(roomId);
 
-    if (!participantId) return [];
+    if (!chatterId) return [];
 
     const message = await this.prisma.message.findFirst({
-      where: { roomId, participantId },
+      where: { roomId, chatterId },
       orderBy: { sentAt: 'asc' },
       select: { sentAt: true },
     });
@@ -90,7 +84,7 @@ export class ChatService {
 
     const result = await this.prisma.message.findMany({
       where: whereInput,
-      include: { participant: true },
+      include: { chatter: true },
       skip: (page - 1) * MESSAGE_LIMIT,
       take: MESSAGE_LIMIT,
       orderBy: { sentAt: 'desc' },
@@ -101,36 +95,36 @@ export class ChatService {
 
   // 방 입장 처리
   async handleJoinRoom(
-    data: { roomId: string; participantId: string | null },
+    data: { roomId: string; chatterId: string | null },
     socket: Socket,
-  ): Promise<Participant> {
-    const { roomId, participantId } = data;
+  ): Promise<Chatter> {
+    const { roomId, chatterId } = data;
     const namespace: Namespace = socket.nsp;
 
     // 입장 처리
     socket.join(roomId);
 
     // 참여자 데이터 처리
-    let participant: Participant;
-    if (participantId) {
+    let chatter: Chatter;
+    if (chatterId) {
       // 참여자 조회
-      participant = await this.prisma.participant.findUnique({
-        where: { id: participantId },
+      chatter = await this.prisma.chatter.findUnique({
+        where: { id: chatterId },
       });
     } else {
       // 참여자 생성
-      const participantId = await this.generateId(this.prisma.participant);
+      const chatterId = await this.generateId(this.prisma.chatter);
       const nickname = generateNickname();
 
-      participant = await this.prisma.participant.create({
-        data: { id: participantId, nickname },
+      chatter = await this.prisma.chatter.create({
+        data: { id: chatterId, nickname },
       });
     }
 
     // 소켓 참여자 설정
-    (socket.data.participants ||= {})[roomId] = participant.id;
+    (socket.data.chatters ||= {})[roomId] = chatter.id;
 
-    const timeoutKey = `${roomId}-${participant.id}`;
+    const timeoutKey = `${roomId}-${chatter.id}`;
     const leaveTimeout = this.leaveTimeout.get(timeoutKey);
     if (leaveTimeout) {
       // 퇴장 타임아웃 제거
@@ -140,16 +134,16 @@ export class ChatService {
       // 메세지 저장
       const message = await this.createMessage({
         type: MessageType.PING,
-        content: COMMENTS.SOCKET.userJoined(participant.nickname),
+        content: COMMENTS.SOCKET.userJoined(chatter.nickname),
         roomId,
-        participantId: participant.id,
+        chatterId: chatter.id,
       });
 
       // 메세지 전송
       this.emit(namespace, message);
     }
 
-    return participant;
+    return chatter;
   }
 
   // 방 퇴장 처리
@@ -161,12 +155,12 @@ export class ChatService {
     const namespace: Namespace = socket.nsp;
 
     // 소켓 참여자 제거
-    const participantId: string = socket.data.participants?.[roomId];
-    delete socket.data.participants?.roomId;
+    const chatterId: string = socket.data.chatters?.[roomId];
+    delete socket.data.chatters?.roomId;
 
     // 참여자 데이터 처리
-    const participant = await this.prisma.participant.update({
-      where: { id: participantId },
+    const chatter = await this.prisma.chatter.update({
+      where: { id: chatterId },
       data: { deletedAt: new Date(), isActive: false },
     });
 
@@ -174,14 +168,14 @@ export class ChatService {
     socket.leave(roomId);
 
     // 퇴장 메세지 처리
-    const timeoutKey = `${roomId}-${participant.id}`;
+    const timeoutKey = `${roomId}-${chatter.id}`;
     const timeout = setTimeout(async () => {
       // 메세지 저장
       const message = await this.createMessage({
         type: MessageType.PING,
-        content: COMMENTS.SOCKET.userLeft(participant.nickname),
+        content: COMMENTS.SOCKET.userLeft(chatter.nickname),
         roomId,
-        participantId,
+        chatterId,
       });
 
       // 메세지 전송
@@ -201,7 +195,7 @@ export class ChatService {
   ): Promise<void> {
     const { roomId, content } = data;
     const namespace: Namespace = socket.nsp;
-    const participantId: string = socket.data.participants?.[roomId];
+    const chatterId: string = socket.data.chatters?.[roomId];
 
     // 채팅방 만료 확인
     await this.checkRoomExpired(roomId);
@@ -211,7 +205,7 @@ export class ChatService {
       type: MessageType.MESSAGE,
       content,
       roomId,
-      participantId,
+      chatterId,
     });
 
     // 메세지 전송
@@ -220,7 +214,7 @@ export class ChatService {
 
   // 메세지 저장
   async createMessage(messageData): Promise<Message> {
-    const { type, content, roomId, participantId } = messageData;
+    const { type, content, roomId, chatterId } = messageData;
     return await this.prisma.message.create({
       data: {
         type,
@@ -228,12 +222,12 @@ export class ChatService {
         room: {
           connect: { id: roomId },
         },
-        participant: {
-          connect: { id: participantId },
+        chatter: {
+          connect: { id: chatterId },
         },
       },
       include: {
-        participant: true,
+        chatter: true,
       },
     });
   }
