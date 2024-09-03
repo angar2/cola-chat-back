@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { COMMENTS } from 'src/shared/constants/comment';
 import { PrismaService } from 'src/shared/prisma/prisma.service';
 import { Socket, Namespace } from 'socket.io';
@@ -9,9 +13,13 @@ import {
   EXPIRY_DAYS,
   LEAVE_MESSAGE_DELAY_TIME,
   MESSAGE_LIMIT,
+  SALT_ROUNDS,
 } from 'src/shared/constants/config';
 import { Message, MessageType, Chatter, Prisma, Room } from '@prisma/client';
 import generateNickname from 'src/shared/utils/nickname';
+import * as bcrypt from 'bcrypt';
+
+type RoomWithoutPassword = Omit<Room, 'password'>;
 
 @Injectable()
 export class ChatService {
@@ -20,14 +28,38 @@ export class ChatService {
   constructor(private readonly prisma: PrismaService) {}
 
   // 방 생성
-  async createRoom(data: { namespace: string; title: string }): Promise<Room> {
+  async createRoom(data: {
+    namespace: string;
+    title: string;
+    isPassword: boolean;
+    password?: string;
+  }): Promise<RoomWithoutPassword> {
+    const { namespace, title, isPassword, password = null } = data;
+
+    // 데이터 논리 검증
+    if ((isPassword && !password) || (!isPassword && password))
+      throw new BadRequestException(COMMENTS.ERROR.INVALID_DATA);
+
     const roomId = await this.generateId(this.prisma.room);
     const expiresAt = addDays(new Date(), EXPIRY_DAYS);
-    const roomData = { id: roomId, expiresAt, ...data };
+
+    const roomData = {
+      id: roomId,
+      namespace,
+      title,
+      isPassword,
+      password,
+      expiresAt,
+    };
+
+    // 비밀번호 해시
+    if (data.password)
+      roomData.password = await bcrypt.hash(data.password, SALT_ROUNDS);
 
     // 데이터 처리
     const resilt = await this.prisma.room.create({
       data: roomData,
+      omit: { password: true },
     });
 
     return resilt;
@@ -49,13 +81,28 @@ export class ChatService {
   }
 
   // 방 전체 조회
-  async getRooms(): Promise<Room[]> {
-    return this.prisma.room.findMany();
+  async getRooms(): Promise<RoomWithoutPassword[]> {
+    return await this.prisma.room.findMany({ omit: { password: true } });
   }
 
   // 특정 방 조회
-  async getRoom(roomId: string): Promise<Room> {
+  async getRoom(roomId: string): Promise<RoomWithoutPassword> {
     return await this.checkRoomExpired(roomId);
+  }
+
+  // 방 비밀번호 검증
+  async verifyRoomPassword(
+    roomId: string,
+    data: { password: string },
+  ): Promise<boolean> {
+    const room = await this.prisma.room.findUnique({
+      where: { id: roomId },
+      select: { password: true },
+    });
+
+    if (!room || !room.password) return false;
+
+    return await bcrypt.compare(data.password, room.password);
   }
 
   // 특정 방의 채터 메시지 전체 조회
@@ -255,9 +302,10 @@ export class ChatService {
   }
 
   // 채팅방 만료 확인
-  private async checkRoomExpired(roomId: string): Promise<Room> {
+  private async checkRoomExpired(roomId: string): Promise<RoomWithoutPassword> {
     const result = await this.prisma.room.findUnique({
       where: { id: roomId },
+      omit: { password: true },
     });
 
     if (!result) throw new NotFoundException(COMMENTS.ERROR.CHAT_NOT_FOUND);

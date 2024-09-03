@@ -9,5 +9,6 @@ export const COMMENTS = {
   ERROR: {
     CHAT_NOT_FOUND: '채팅방이 존재하지 않습니다.',
     CHAT_EXPIRED: '채팅이 만료되어 더 이상 사용할 수 없습니다.',
+    INVALID_DATA: '요청된 데이터가 올바르지 않습니다.',
   },
 };

@@ -7,7 +7,15 @@ export class ChatController {
 
   // 방 생성
   @Post('rooms')
-  async createRoom(@Body() data: { namespace: string; title: string }) {
+  async createRoom(
+    @Body()
+    data: {
+      namespace: string;
+      title: string;
+      isPassword: boolean;
+      password?: string;
+    },
+  ) {
     const result = await this.chatService.createRoom(data);
     return { statusCode: 201, data: result };
   }
@@ -23,6 +31,16 @@ export class ChatController {
   @Get('rooms/:roomId')
   async getRoom(@Param('roomId') roomId: string) {
     const result = await this.chatService.getRoom(roomId);
+    return { statusCode: 200, data: result };
+  }
+
+  // 방 비밀번호 검증
+  @Post('rooms/:roomId')
+  async verifyRoomPassword(
+    @Param('roomId') roomId: string,
+    @Body() data: { password: string },
+  ) {
+    const result = await this.chatService.verifyRoomPassword(roomId, data);
     return { statusCode: 200, data: result };
   }
 
