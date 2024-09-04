@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ChatService } from './chat.service';
 
 @Controller('chat')
@@ -50,6 +50,16 @@ export class ChatController {
     @Param() params: { roomId: string; page: number; chatterId?: string },
   ) {
     const result = await this.chatService.getMessagesFromRoom(params);
+    return { statusCode: 200, data: result };
+  }
+
+  // 채터 닉네임 변경
+  @Patch('chatters/:chatterId/nickname')
+  async updateNickname(
+    @Param() params: { chatterId: string },
+    @Body() data: { nickname: string },
+  ) {
+    const result = await this.chatService.updateNickname(params, data);
     return { statusCode: 200, data: result };
   }
 }

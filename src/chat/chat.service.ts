@@ -140,6 +140,29 @@ export class ChatService {
     return result.reverse();
   }
 
+  // 채터 닉네임 변경
+  async updateNickname(
+    params: { chatterId: string },
+    data: { nickname: string },
+  ): Promise<Chatter> {
+    const { chatterId } = params;
+    const { nickname } = data;
+
+    const chatter = await this.prisma.chatter.findUnique({
+      where: { id: chatterId },
+    });
+
+    if (!chatter) throw new NotFoundException(COMMENTS.ERROR.CHATTER_NOT_FOUND);
+
+    // 닉네임 변경
+    const result = await this.prisma.chatter.update({
+      where: { id: chatter.id },
+      data: { nickname },
+    });
+
+    return result;
+  }
+
   // 방 입장 처리
   async handleJoinRoom(
     data: { roomId: string; chatterId: string | null },
