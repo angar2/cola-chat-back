@@ -10,11 +10,13 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
-import { UseInterceptors } from '@nestjs/common';
+import { UseFilters, UseInterceptors } from '@nestjs/common';
 import { WsResponseInterceptor } from 'src/shared/interceptors/ws-response.interceptor';
+import { WsErrorExceptionFilter } from 'src/shared/filters/ws-errorException.Filter';
 
 @WebSocketGateway({ namespace: /\/*.+/ })
 @UseInterceptors(WsResponseInterceptor)
+@UseFilters(WsErrorExceptionFilter)
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
@@ -64,5 +66,14 @@ export class ChatGateway
     @ConnectedSocket() socket: Socket,
   ): Promise<void> {
     await this.chatService.handleMessage(data, socket);
+  }
+
+  // 공지 수신 처리
+  @SubscribeMessage('ping')
+  async handlePing(
+    @MessageBody() data: { roomId: string; content: string },
+    @ConnectedSocket() socket: Socket,
+  ): Promise<void> {
+    await this.chatService.handlePing(data, socket);
   }
 }

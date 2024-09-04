@@ -298,6 +298,30 @@ export class ChatService {
     this.emit(namespace, message);
   }
 
+  // 공지 수신 처리
+  async handlePing(
+    data: { roomId: string; content: string },
+    socket: Socket,
+  ): Promise<void> {
+    const { roomId, content } = data;
+    const namespace: Namespace = socket.nsp;
+    const chatterId: string = socket.data.chatters?.[roomId];
+
+    // 채팅방 만료 확인
+    await this.checkRoomExpired(roomId);
+
+    // 메세지 저장
+    const message = await this.createMessage({
+      type: MessageType.PING,
+      content,
+      roomId,
+      chatterId,
+    });
+
+    // 메세지 전송
+    this.emit(namespace, message);
+  }
+
   // 메세지 저장
   async createMessage(messageData): Promise<Message> {
     const { type, content, roomId, chatterId } = messageData;
