@@ -9,7 +9,7 @@ import {
 import { Request, Response } from 'express';
 
 @Catch(Error)
-export class ErrorExceptionFilter implements ExceptionFilter {
+export class ApiErrorExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger();
 
   catch(exception: Error, host: ArgumentsHost) {

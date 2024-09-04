@@ -4,7 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './shared/prisma/prisma.module';
 import { RedisModule } from './shared/redis/redis.module';
 import { ChatModule } from './chat/chat.module';
-import { ErrorExceptionFilter } from './shared/filters/errorException.Filter';
+import { ApiErrorExceptionFilter } from './shared/filters/api-errorException.Filter';
 import { ApiResponseInterceptor } from './shared/interceptors/api-response.interceptor';
 
 @Module({
@@ -20,7 +20,7 @@ import { ApiResponseInterceptor } from './shared/interceptors/api-response.inter
   providers: [
     {
       provide: APP_FILTER,
-      useClass: ErrorExceptionFilter,
+      useClass: ApiErrorExceptionFilter,
     },
     {
       provide: APP_INTERCEPTOR,
