@@ -18,6 +18,7 @@ import {
 import { Message, MessageType, Chatter, Prisma, Room } from '@prisma/client';
 import generateNickname from 'src/shared/utils/nickname';
 import * as bcrypt from 'bcrypt';
+import { WsException } from '@nestjs/websockets';
 
 type RoomWithoutPassword = Omit<Room, 'password'>;
 
@@ -212,14 +213,14 @@ export class ChatService {
       if (!chatterIds.includes(chatterId)) {
         // 메세지 저장
         const message = await this.createMessage({
-          type: MessageType.PING,
+          type: MessageType.ALERT,
           content: COMMENTS.SOCKET.userJoined(chatter.nickname),
           roomId,
           chatterId: chatter.id,
         });
 
         // 웹소켓 전송
-        this.emit<Message>(namespace, roomId, SocketEvent.PING, message);
+        this.emit<Message>(namespace, roomId, SocketEvent.ALERT, message);
       }
     }
 
@@ -267,14 +268,14 @@ export class ChatService {
 
         // 메세지 저장
         const message = await this.createMessage({
-          type: MessageType.PING,
+          type: MessageType.ALERT,
           content: COMMENTS.SOCKET.userLeft(chatter.nickname),
           roomId,
           chatterId,
         });
 
         // 웹소켓 전송
-        this.emit<Message>(namespace, roomId, SocketEvent.PING, message);
+        this.emit<Message>(namespace, roomId, SocketEvent.ALERT, message);
 
         // 채팅방 온라인 상태 전송
         await this.emitOnlineClients(socket, roomId);
@@ -295,7 +296,7 @@ export class ChatService {
     const { roomId, content } = data;
     const namespace: Namespace = socket.nsp;
     const chatterId: string = socket.data.chatters?.[roomId];
-
+    
     // 채팅방 만료 확인
     await this.checkRoomExpired(roomId);
 
@@ -325,14 +326,14 @@ export class ChatService {
 
     // 메세지 저장
     const message = await this.createMessage({
-      type: MessageType.PING,
+      type: MessageType.ALERT,
       content,
       roomId,
       chatterId,
     });
 
     // 웹소켓 전송
-    this.emit<Message>(namespace, roomId, SocketEvent.PING, message);
+    this.emit<Message>(namespace, roomId, SocketEvent.ALERT, message);
   }
 
   // 채팅방 온라인 상태 전송

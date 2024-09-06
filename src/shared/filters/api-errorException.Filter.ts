@@ -13,6 +13,8 @@ export class ApiErrorExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger();
 
   catch(exception: Error, host: ArgumentsHost) {
+    console.error(exception);
+
     const context = host.switchToHttp();
     const response = context.getResponse<Response>();
     const request = context.getRequest<Request>();

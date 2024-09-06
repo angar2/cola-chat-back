@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `Message` MODIFY `type` ENUM('MESSAGE', 'ALERT') NOT NULL DEFAULT 'MESSAGE';

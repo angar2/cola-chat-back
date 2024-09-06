@@ -12,6 +12,8 @@ export class WsErrorExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger();
 
   catch(exception: Error, host: ArgumentsHost) {
+    console.error(exception);
+
     const context = host.switchToWs();
     const client = context.getClient();
 

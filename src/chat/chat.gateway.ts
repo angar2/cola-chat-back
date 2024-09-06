@@ -40,7 +40,7 @@ export class ChatGateway
   }
 
   // 방 입장 처리
-  @SubscribeMessage('join')
+  @SubscribeMessage('joinRoom')
   async handleJoinRoom(
     @MessageBody()
     data: { roomId: string; chatterId: string | null },
@@ -51,7 +51,7 @@ export class ChatGateway
   }
 
   // 방 퇴장 처리
-  @SubscribeMessage('leave')
+  @SubscribeMessage('leaveRoom')
   async handleLeaveRoom(
     @MessageBody() data: { roomId: string },
     @ConnectedSocket() socket: Socket,
@@ -60,8 +60,8 @@ export class ChatGateway
   }
 
   // 메세지 수신 처리
-  @SubscribeMessage('message')
-  async handleMessage(
+  @SubscribeMessage('sendMessage')
+  async handleSendMessage(
     @MessageBody() data: { roomId: string; content: string },
     @ConnectedSocket() socket: Socket,
   ): Promise<void> {
@@ -69,8 +69,8 @@ export class ChatGateway
   }
 
   // 공지 수신 처리
-  @SubscribeMessage('ping')
-  async handlePing(
+  @SubscribeMessage('sendAlert')
+  async handleSendAlert(
     @MessageBody() data: { roomId: string; content: string },
     @ConnectedSocket() socket: Socket,
   ): Promise<void> {
