@@ -25,6 +25,7 @@ model Room {
   title       String
   namespace   String
   password    String?
+  capacity    Int       @default(0)
   createdAt   DateTime  @default(now())
   expiresAt   DateTime
   isPassword  Boolean   @default(false)

@@ -12,6 +12,7 @@ export class ChatController {
     data: {
       namespace: string;
       title: string;
+      capacity: number;
       isPassword: boolean;
       password?: string;
     },
@@ -34,13 +35,13 @@ export class ChatController {
     return { statusCode: 200, data: result };
   }
 
-  // 방 비밀번호 검증
-  @Post('rooms/:roomId')
-  async verifyRoomPassword(
+  // 방 입장 검증
+  @Post('rooms/:roomId/access-check')
+  async validateRoomEntry(
     @Param('roomId') roomId: string,
-    @Body() data: { password: string },
+    @Body() data: { password?: string },
   ) {
-    const result = await this.chatService.verifyRoomPassword(roomId, data);
+    const result = await this.chatService.validateRoomEntry(roomId, data);
     return { statusCode: 200, data: result };
   }
 

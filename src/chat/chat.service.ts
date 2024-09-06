@@ -23,6 +23,7 @@ type RoomWithoutPassword = Omit<Room, 'password'>;
 
 @Injectable()
 export class ChatService {
+  private onlineClients = new Map<string, Map<string, Set<string>>>();
   private leaveTimeout: Map<string, NodeJS.Timeout> = new Map();
 
   constructor(private readonly prisma: PrismaService) {}
@@ -31,10 +32,11 @@ export class ChatService {
   async createRoom(data: {
     namespace: string;
     title: string;
+    capacity: number;
     isPassword: boolean;
     password?: string;
   }): Promise<RoomWithoutPassword> {
-    const { namespace, title, isPassword, password = null } = data;
+    const { namespace, title, capacity, isPassword, password = null } = data;
 
     // 데이터 논리 검증
     if ((isPassword && !password) || (!isPassword && password))
@@ -47,6 +49,7 @@ export class ChatService {
       id: roomId,
       namespace,
       title,
+      capacity,
       isPassword,
       password,
       expiresAt,
@@ -87,22 +90,26 @@ export class ChatService {
 
   // 특정 방 조회
   async getRoom(roomId: string): Promise<RoomWithoutPassword> {
-    return await this.checkRoomExpired(roomId);
+    const result = await this.prisma.room.findUnique({
+      where: { id: roomId },
+      include: { roomChatters: { where: { isActive: true } } },
+    });
+    if (!result) throw new NotFoundException(COMMENTS.ERROR.CHAT_NOT_FOUND);
+
+    return result;
   }
 
-  // 방 비밀번호 검증
-  async verifyRoomPassword(
+  // 방 입장 검증
+  async validateRoomEntry(
     roomId: string,
-    data: { password: string },
+    data: { password?: string },
   ): Promise<boolean> {
-    const room = await this.prisma.room.findUnique({
-      where: { id: roomId },
-      select: { password: true },
-    });
+    const room = await this.checkRoomExpired(roomId); // 만료 검증
+    const isValid = await this.verifyRoomPassword(data.password, room.password); // 비밀번호 검증
+    if (!isValid) return false;
+    const result = await this.validateRoomExceeded(roomId, room.capacity); // 인원수 확인
 
-    if (!room || !room.password) return false;
-
-    return await bcrypt.compare(data.password, room.password);
+    return result;
   }
 
   // 특정 방의 채터 메시지 전체 조회
@@ -194,30 +201,35 @@ export class ChatService {
     // 소켓 채터 설정
     (socket.data.chatters ||= {})[roomId] = chatter.id;
 
+    // 퇴장 타임아웃 제거
     const timeoutKey = `${roomId}-${chatter.id}`;
     const leaveTimeout = this.leaveTimeout.get(timeoutKey);
-
     if (leaveTimeout) {
-      // 퇴장 타임아웃 제거
       clearTimeout(leaveTimeout);
       this.leaveTimeout.delete(timeoutKey);
     } else {
-      // 채팅방 명단에 추가
-      await this.prisma.roomChatter.create({
-        data: { roomId: roomId, chatterId: chatter.id },
-      });
+      const chatterIds = this.getOnlineClients(roomId);
+      if (!chatterIds.includes(chatterId)) {
+        // 메세지 저장
+        const message = await this.createMessage({
+          type: MessageType.PING,
+          content: COMMENTS.SOCKET.userJoined(chatter.nickname),
+          roomId,
+          chatterId: chatter.id,
+        });
 
-      // 메세지 저장
-      const message = await this.createMessage({
-        type: MessageType.PING,
-        content: COMMENTS.SOCKET.userJoined(chatter.nickname),
-        roomId,
-        chatterId: chatter.id,
-      });
-
-      // 메세지 전송
-      this.emit(namespace, message);
+        // 웹소켓 전송
+        this.emit<Message>(namespace, roomId, SocketEvent.PING, message);
+      }
     }
+
+    // 채팅방 온라인 상태 처리
+    this.handleOnlineClients(socket, roomId, chatter.id, {
+      isAdding: true,
+    });
+
+    // 채팅방 온라인 상태 전송
+    await this.emitOnlineClients(socket, roomId);
 
     return chatter;
   }
@@ -237,41 +249,42 @@ export class ChatService {
     // 퇴장 처리
     socket.leave(roomId);
 
-    // 퇴장 메세지 처리
-    const timeoutKey = `${roomId}-${chatterId}`;
-    const timeout = setTimeout(async () => {
-      // 채터 데이터 처리
-      const chatter = await this.prisma.chatter.update({
-        where: { id: chatterId },
-        data: { deletedAt: new Date(), isActive: false },
-      });
+    // 채팅방 온라인 상태 처리
+    this.handleOnlineClients(socket, roomId, chatterId, {
+      isAdding: false,
+    });
 
-      // 채팅방 명단에서 제거
-      const roomChatter = await this.prisma.roomChatter.findFirst({
-        where: { roomId: roomId, chatterId: chatter.id },
-      });
+    const chatterIds = this.getOnlineClients(roomId);
+    if (!chatterIds.includes(chatterId)) {
+      // 퇴장 메세지 처리
+      const timeoutKey = `${roomId}-${chatterId}`;
+      const timeout = setTimeout(async () => {
+        // 채터 데이터 처리
+        const chatter = await this.prisma.chatter.update({
+          where: { id: chatterId },
+          data: { deletedAt: new Date(), isActive: false },
+        });
 
-      await this.prisma.roomChatter.update({
-        where: { id: roomChatter.id },
-        data: { leftAt: new Date(), isActive: false },
-      });
+        // 메세지 저장
+        const message = await this.createMessage({
+          type: MessageType.PING,
+          content: COMMENTS.SOCKET.userLeft(chatter.nickname),
+          roomId,
+          chatterId,
+        });
 
-      // 메세지 저장
-      const message = await this.createMessage({
-        type: MessageType.PING,
-        content: COMMENTS.SOCKET.userLeft(chatter.nickname),
-        roomId,
-        chatterId,
-      });
+        // 웹소켓 전송
+        this.emit<Message>(namespace, roomId, SocketEvent.PING, message);
 
-      // 메세지 전송
-      this.emit(namespace, message);
+        // 채팅방 온라인 상태 전송
+        await this.emitOnlineClients(socket, roomId);
 
-      // 타임아웃 제거
-      this.leaveTimeout.delete(timeoutKey);
-    }, LEAVE_MESSAGE_DELAY_TIME);
+        // 타임아웃 제거
+        this.leaveTimeout.delete(timeoutKey);
+      }, LEAVE_MESSAGE_DELAY_TIME);
 
-    this.leaveTimeout.set(timeoutKey, timeout);
+      this.leaveTimeout.set(timeoutKey, timeout);
+    }
   }
 
   // 메세지 수신 처리
@@ -294,8 +307,8 @@ export class ChatService {
       chatterId,
     });
 
-    // 메세지 전송
-    this.emit(namespace, message);
+    // 웹소켓 전송
+    this.emit<Message>(namespace, roomId, SocketEvent.MESSAGE, message);
   }
 
   // 공지 수신 처리
@@ -318,8 +331,39 @@ export class ChatService {
       chatterId,
     });
 
-    // 메세지 전송
-    this.emit(namespace, message);
+    // 웹소켓 전송
+    this.emit<Message>(namespace, roomId, SocketEvent.PING, message);
+  }
+
+  // 채팅방 온라인 상태 전송
+  private async emitOnlineClients(
+    socket: Socket,
+    roomId: string,
+  ): Promise<void> {
+    const namespace: Namespace = socket.nsp;
+
+    // onlineClients 조회
+    const chatterIds = this.getOnlineClients(roomId);
+    const chatters = await this.prisma.chatter.findMany({
+      where: { id: { in: chatterIds } },
+    });
+
+    // 웹소켓 전송
+    this.emit<Chatter[]>(namespace, roomId, SocketEvent.CHATTERS, chatters);
+  }
+
+  // 채팅방 온라인 상태 처리
+  private handleOnlineClients(
+    socket: Socket,
+    roomId: string,
+    chatterId: string,
+    option?: { isAdding: boolean },
+  ): void {
+    const { isAdding = true } = option;
+
+    // onlineClients 처리
+    if (isAdding) this.addSocketToOnline(roomId, chatterId, socket.id);
+    else this.removeSocketFromOnline(roomId, chatterId, socket.id);
   }
 
   // 메세지 저장
@@ -343,20 +387,23 @@ export class ChatService {
   }
 
   // 전송 처리
-  emit(namespace: Namespace, data: Message): void {
-    const { roomId, type } = data;
-    namespace.to(roomId).emit(SocketEvent[type], data);
+  emit<T>(
+    namespace: Namespace,
+    roomId: string,
+    event: SocketEvent,
+    data: T,
+  ): void {
+    namespace.to(roomId).emit(event, data);
   }
 
   // 채팅방 만료 확인
-  private async checkRoomExpired(roomId: string): Promise<RoomWithoutPassword> {
-    const result = await this.prisma.room.findUnique({
+  private async checkRoomExpired(roomId: string): Promise<Room> {
+    const room = await this.prisma.room.findUnique({
       where: { id: roomId },
-      omit: { password: true },
     });
 
-    if (!result) throw new NotFoundException(COMMENTS.ERROR.CHAT_NOT_FOUND);
-    if (result.expiresAt < new Date()) {
+    if (!room) throw new NotFoundException(COMMENTS.ERROR.CHAT_NOT_FOUND);
+    if (room.expiresAt < new Date()) {
       await this.prisma.room.update({
         where: { id: roomId },
         data: { isExpired: true },
@@ -364,6 +411,68 @@ export class ChatService {
       throw new NotFoundException(COMMENTS.ERROR.CHAT_EXPIRED);
     }
 
-    return result;
+    return room;
+  }
+
+  // 채팅방 인원수 확인
+  private async validateRoomExceeded(
+    roomId: string,
+    capacity: number,
+  ): Promise<boolean> {
+    const onlineCount = this.onlineClients.get(roomId)?.size;
+    if (onlineCount && onlineCount >= capacity)
+      throw new NotFoundException(COMMENTS.ERROR.ROOM_CAPACITY_FULL);
+    return true;
+  }
+
+  // 방 비밀번호 검증
+  private async verifyRoomPassword(
+    inputPassword?: string,
+    storedPassword?: string,
+  ): Promise<boolean> {
+    if (inputPassword) {
+      const isValid = await bcrypt.compare(inputPassword, storedPassword || '');
+      return isValid;
+    }
+    return true;
+  }
+
+  // 온라인에 소켓 추가
+  private addSocketToOnline(
+    roomId: string,
+    chatterId: string,
+    socketId: string,
+  ): void {
+    if (!this.onlineClients.has(roomId))
+      this.onlineClients.set(roomId, new Map());
+
+    const room = this.onlineClients.get(roomId);
+    if (!room.has(chatterId)) room.set(chatterId, new Set());
+
+    const sockets = room!.get(chatterId);
+    sockets.add(socketId);
+  }
+
+  // 온라인에 소켓 제거
+  private removeSocketFromOnline(
+    roomId: string,
+    chatterId: string,
+    socketId: string,
+  ): void {
+    const room = this.onlineClients.get(roomId);
+    if (room && room.has(chatterId)) {
+      const sockets = room.get(chatterId);
+      if (sockets) {
+        sockets.delete(socketId);
+        if (sockets.size === 0) room.delete(chatterId);
+        if (room.size === 0) this.onlineClients.delete(roomId);
+      }
+    }
+  }
+
+  // 채팅방 온라인 상태 조회
+  private getOnlineClients(roomId: string): string[] {
+    const room = this.onlineClients.get(roomId);
+    return room ? Array.from(room.keys()) : [];
   }
 }

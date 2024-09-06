@@ -11,5 +11,6 @@ export const COMMENTS = {
     CHAT_EXPIRED: '채팅이 만료되어 더 이상 사용할 수 없습니다.',
     INVALID_DATA: '요청된 데이터가 올바르지 않습니다.',
     CHATTER_NOT_FOUND: '채팅 참여자를 찾을 수 없습니다.',
+    ROOM_CAPACITY_FULL: '채팅방 인원수가 가득차서 입장할 수 없습니다.',
   },
 };
