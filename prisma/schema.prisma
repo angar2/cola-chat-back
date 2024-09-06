@@ -49,7 +49,7 @@ model Chatter {
 model Message {
   id        Int         @id @default(autoincrement())
   type      MessageType @default(MESSAGE)
-  content   String
+  content   String      @db.Text
   sentAt    DateTime    @default(now())
   room      Room        @relation(fields: [roomId], references: [id])
   roomId    String
