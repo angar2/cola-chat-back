@@ -113,6 +113,17 @@ export class ChatService {
     return result;
   }
 
+  // 방 입장 검증
+  async checkReentry(params: {
+    roomId: string;
+    chatterId: string;
+  }): Promise<boolean> {
+    const { roomId, chatterId } = params;
+    const room = this.onlineClients.get(roomId);
+
+    return room && room.has(chatterId);
+  }
+
   // 특정 방의 채터 메시지 전체 조회
   async getMessagesFromRoom(params: {
     roomId: string;
@@ -255,11 +266,17 @@ export class ChatService {
       isAdding: false,
     });
 
-    const chatterIds = this.getOnlineClients(roomId);
-    if (!chatterIds.includes(chatterId)) {
-      // 퇴장 메세지 처리
-      const timeoutKey = `${roomId}-${chatterId}`;
-      const timeout = setTimeout(async () => {
+    // 퇴장 메세지 처리
+    const timeoutKey = `${roomId}-${chatterId}`;
+    const timeout = setTimeout(async () => {
+      // 채팅방 온라인에서 채터 제거
+      this.removeChatterFromOnline(roomId, chatterId);
+
+      // 채팅방 온라인 상태 전송
+      await this.emitOnlineClients(socket, roomId);
+
+      const chatterIds = this.getOnlineClients(roomId);
+      if (!chatterIds.includes(chatterId)) {
         // 채터 데이터 처리
         const chatter = await this.prisma.chatter.update({
           where: { id: chatterId },
@@ -276,16 +293,12 @@ export class ChatService {
 
         // 웹소켓 전송
         this.emit<Message>(namespace, roomId, SocketEvent.ALERT, message);
+      }
+      // 타임아웃 제거
+      this.leaveTimeout.delete(timeoutKey);
+    }, LEAVE_MESSAGE_DELAY_TIME);
 
-        // 채팅방 온라인 상태 전송
-        await this.emitOnlineClients(socket, roomId);
-
-        // 타임아웃 제거
-        this.leaveTimeout.delete(timeoutKey);
-      }, LEAVE_MESSAGE_DELAY_TIME);
-
-      this.leaveTimeout.set(timeoutKey, timeout);
-    }
+    this.leaveTimeout.set(timeoutKey, timeout);
   }
 
   // 메세지 수신 처리
@@ -296,7 +309,7 @@ export class ChatService {
     const { roomId, content } = data;
     const namespace: Namespace = socket.nsp;
     const chatterId: string = socket.data.chatters?.[roomId];
-    
+
     // 채팅방 만료 확인
     await this.checkRoomExpired(roomId);
 
@@ -454,6 +467,16 @@ export class ChatService {
     sockets.add(socketId);
   }
 
+  // 온라인에 채터 제거
+  private removeChatterFromOnline(roomId: string, chatterId: string): void {
+    const room = this.onlineClients.get(roomId);
+    if (room && room.has(chatterId)) {
+      const sockets = room.get(chatterId);
+      if (sockets.size === 0) room.delete(chatterId);
+      if (room.size === 0) this.onlineClients.delete(roomId);
+    }
+  }
+
   // 온라인에 소켓 제거
   private removeSocketFromOnline(
     roomId: string,
@@ -463,11 +486,7 @@ export class ChatService {
     const room = this.onlineClients.get(roomId);
     if (room && room.has(chatterId)) {
       const sockets = room.get(chatterId);
-      if (sockets) {
-        sockets.delete(socketId);
-        if (sockets.size === 0) room.delete(chatterId);
-        if (room.size === 0) this.onlineClients.delete(roomId);
-      }
+      if (sockets) sockets.delete(socketId);
     }
   }
 
