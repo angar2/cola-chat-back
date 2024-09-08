@@ -65,7 +65,7 @@ export class ChatGateway
     @MessageBody() data: { roomId: string; content: string },
     @ConnectedSocket() socket: Socket,
   ): Promise<void> {
-    await this.chatService.handleMessage(data, socket);
+    await this.chatService.handleSendMessage(data, socket);
   }
 
   // 공지 수신 처리
@@ -74,6 +74,6 @@ export class ChatGateway
     @MessageBody() data: { roomId: string; content: string },
     @ConnectedSocket() socket: Socket,
   ): Promise<void> {
-    await this.chatService.handlePing(data, socket);
+    await this.chatService.handleSendAlert(data, socket);
   }
 }

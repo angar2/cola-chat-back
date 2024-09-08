@@ -302,7 +302,7 @@ export class ChatService {
   }
 
   // 메세지 수신 처리
-  async handleMessage(
+  async handleSendMessage(
     data: { roomId: string; content: string },
     socket: Socket,
   ): Promise<void> {
@@ -326,7 +326,7 @@ export class ChatService {
   }
 
   // 공지 수신 처리
-  async handlePing(
+  async handleSendAlert(
     data: { roomId: string; content: string },
     socket: Socket,
   ): Promise<void> {
