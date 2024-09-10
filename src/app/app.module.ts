@@ -6,12 +6,15 @@ import { RedisModule } from '../shared/redis/redis.module';
 import { ChatModule } from './chat/chat.module';
 import { ApiErrorExceptionFilter } from '../shared/filters/api-errorException.Filter';
 import { ApiResponseInterceptor } from '../shared/interceptors/api-response.interceptor';
+import { joiConfigSchema } from 'src/shared/configs/joi.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
+      envFilePath: `.env.${process.env.NODE_ENV || 'development'}`,
+      validationSchema: joiConfigSchema,
+      cache: true,
       isGlobal: true,
-      envFilePath: `.env.${process.env.NODE_ENV || 'dev'}`,
     }),
     PrismaModule,
     RedisModule,
