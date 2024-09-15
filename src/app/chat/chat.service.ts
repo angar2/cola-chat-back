@@ -248,18 +248,13 @@ export class ChatService {
 
   // 방 퇴장 처리
   async handleLeaveRoom(
-    data: { roomId: string },
     socket: Socket,
   ): Promise<void> {
-    const { roomId } = data;
     const namespace: Namespace = socket.nsp;
-
-    // 소켓 채터 제거
-    const chatterId: string = socket.data.chatters?.[roomId];
-    delete socket.data.chatters?.roomId;
-
-    // 퇴장 처리
-    socket.leave(roomId);
+    const socketChatters = socket.data.chatters;
+    const roomId = socketChatters ? Object.keys(socketChatters)[0] : null;
+    const chatterId: string = roomId ? socketChatters[roomId] : null;
+    if (!roomId || !chatterId) throw NotFoundException;
 
     // 채팅방 온라인 상태 처리
     this.handleOnlineClients(socket, roomId, chatterId, {

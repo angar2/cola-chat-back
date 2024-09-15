@@ -36,6 +36,7 @@ export class ChatGateway
 
   // 웹소켓 연결 해제
   handleDisconnect(@ConnectedSocket() socket: Socket): void {
+    this.chatService.handleLeaveRoom(socket);
     console.log('WebSocket Disconnected from', socket.nsp.name);
   }
 
@@ -53,10 +54,9 @@ export class ChatGateway
   // 방 퇴장 처리
   @SubscribeMessage('leaveRoom')
   async handleLeaveRoom(
-    @MessageBody() data: { roomId: string },
     @ConnectedSocket() socket: Socket,
   ): Promise<void> {
-    this.chatService.handleLeaveRoom(data, socket);
+    this.chatService.handleLeaveRoom(socket);
   }
 
   // 메세지 수신 처리
