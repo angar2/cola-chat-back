@@ -14,6 +14,6 @@ export const joiConfigSchema = Joi.object({
   HTTP_CORS_ORIGIN: Joi.string().uri().required(),
   WS_CORS_ORIGIN: Joi.string()
     .uri()
-    .regex(/^wss:\/\//)
+    .regex(/^wss?:\/\//)
     .required(),
 });
