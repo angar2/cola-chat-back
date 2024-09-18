@@ -247,9 +247,7 @@ export class ChatService {
   }
 
   // 방 퇴장 처리
-  async handleLeaveRoom(
-    socket: Socket,
-  ): Promise<void> {
+  async handleLeaveRoom(socket: Socket): Promise<void> {
     const namespace: Namespace = socket.nsp;
     const socketChatters = socket.data.chatters;
     const roomId = socketChatters ? Object.keys(socketChatters)[0] : null;
@@ -342,6 +340,14 @@ export class ChatService {
 
     // 웹소켓 전송
     this.emit<Message>(namespace, roomId, SocketEvent.ALERT, message);
+  }
+
+  // 채팅방 온라인 상태 전송 처리
+  async handleSendOnlineClients(
+    data: { roomId: string },
+    socket: Socket,
+  ): Promise<void> {
+    this.emitOnlineClients(socket, data.roomId);
   }
 
   // 채팅방 온라인 상태 전송

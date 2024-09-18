@@ -53,9 +53,7 @@ export class ChatGateway
 
   // 방 퇴장 처리
   @SubscribeMessage('leaveRoom')
-  async handleLeaveRoom(
-    @ConnectedSocket() socket: Socket,
-  ): Promise<void> {
+  async handleLeaveRoom(@ConnectedSocket() socket: Socket): Promise<void> {
     this.chatService.handleLeaveRoom(socket);
   }
 
@@ -75,5 +73,14 @@ export class ChatGateway
     @ConnectedSocket() socket: Socket,
   ): Promise<void> {
     await this.chatService.handleSendAlert(data, socket);
+  }
+
+  // 온라인 상태 전송 처리
+  @SubscribeMessage('returnChatters')
+  async handleSendOnlineClients(
+    @MessageBody() data: { roomId: string },
+    @ConnectedSocket() socket: Socket,
+  ): Promise<void> {
+    await this.chatService.handleSendOnlineClients(data, socket);
   }
 }
